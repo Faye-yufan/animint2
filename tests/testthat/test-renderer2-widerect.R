@@ -30,7 +30,7 @@ getBounds <- function(geom.class){
 test_that("bottom of widerect is above line", {
   rect.bounds <- getBounds("geom1_widerect_gg")
   line.bounds <- getBounds("geom2_line_gg")
-  expect_less_than(rect.bounds$bottom, line.bounds$top)
+  expect_lt(rect.bounds$bottom, line.bounds$top)
 })
 
 data(WorldBank, package = "animint2")
