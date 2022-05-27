@@ -30,8 +30,7 @@ wb.facets <-
                    data=SCATTER(not.na))+
          scale_size_animint(breaks=10^(5:9))+
          facet_grid(.~facet, scales="free")+
-         geom_text(aes(5, 85, label=paste0("year = ", year),
-                  key=country),
+         geom_text(aes(5, 85, label=paste0("year = ", year)),
                    showSelected="year",
                    data=SCATTER(years)),
        time=list(variable="year",ms=3000),
