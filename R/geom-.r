@@ -602,7 +602,7 @@ Geom <- gganimintproto("Geom",
   
   #
   # test
-  export_animint_opt = function(l, d, meta, layer_name, ggplot, built, AnimationInfo) {
+  export_animint_dt = function(l, d, meta, layer_name, ggplot, built, AnimationInfo) {
     xminv <- y <- xmaxv <- chunks.for <- NULL
     ## above to avoid NOTE on CRAN check.
     g <- list(geom=strsplit(layer_name, "_")[[1]][2])
@@ -1028,7 +1028,7 @@ Geom <- gganimintproto("Geom",
 
     ## Determine if there are any "common" data that can be saved
     ## separately to reduce disk usage.
-    data.or.null <- getCommonChunk_opt(g.data, chunk.cols, g$aes)
+    data.or.null <- getCommonChunk_dt(g.data, chunk.cols, g$aes)
     g.data.varied <- if(is.null(data.or.null)){
       split.x(na.omit(g.data), chunk.cols)
     }else{

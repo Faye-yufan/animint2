@@ -654,7 +654,7 @@ servr::httd("', normalizePath( out.dir,winslash="/" ), '")')
   ### An invisible copy of the R list that was exported to JSON.
 }
 
-animint2dir_opt <- function(plot.list, out.dir = NULL,
+animint2dir_dt <- function(plot.list, out.dir = NULL,
                         json.file = "plot.json", open.browser = interactive(),
                         css.file = "") {
   if(is.null(out.dir)){
@@ -776,7 +776,7 @@ animint2dir_opt <- function(plot.list, out.dir = NULL,
       if(nrow(df)==0){
         stop("no data in ", layer_name)
       }
-      gl <- Geom$export_animint_opt(
+      gl <- Geom$export_animint_dt(
         L, df, meta, layer_name,
         ggplot.info$ggplot, ggplot.info$built, AnimationInfo)
       ## Save Animation Info separately
