@@ -760,7 +760,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Remove columns with all NA values
   ## so that common.not.na is not empty
   ## due to the plot's alpha, stroke or other columns
-  built <- data.table::setDT(built)
+  built <- setDT(built)
   built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
   # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
   # see the benchmark here: https://stackoverflow.com/a/52178772
@@ -783,7 +783,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   if(! "group" %in% names(built)){
     chunk.rows <- chunk.rows.tab[1]
     same.size <- chunk.rows == chunk.rows.tab ##?????
-    built <- data.table::setorderv(built, chunk.vars)
+    built <- setorderv(built, chunk.vars)
     if(all(same.size)){
       built$group <- 1:chunk.rows
     }else{
@@ -889,7 +889,7 @@ getCommonChunk_dt <- function(built, chunk.vars, aes.list){
   ## Remove columns with all NA values
   ## so that common.not.na is not empty
   ## due to the plot's alpha, stroke or other columns
-  built <- data.table::setDT(built)
+  built <- setDT(built)
   built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
   # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
   # see the benchmark here: https://stackoverflow.com/a/52178772
