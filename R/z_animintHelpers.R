@@ -777,7 +777,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## If there is only one chunk, then there is no point of making a
   ## common data file.
   ### group chunk var?
-  built <- as.data.frame(built)
+  built <- setDF(built)
   chunk.rows.tab <- table(built[, chunk.vars]) ## ????
   if(length(chunk.rows.tab) == 1) return(NULL)
 
