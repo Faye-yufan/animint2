@@ -761,7 +761,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Remove columns with all NA values
   ## so that common.not.na is not empty
   ## due to the plot's alpha, stroke or other columns
-  setDT(built)
+  built <- as.data.table(built)
   built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
   # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
   # see the benchmark here: https://stackoverflow.com/a/52178772
