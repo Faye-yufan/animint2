@@ -761,7 +761,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Remove columns with all NA values
   ## so that common.not.na is not empty
   ## due to the plot's alpha, stroke or other columns
-  built <- setDT(built)
+  setDT(built)
   built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
   # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
   # see the benchmark here: https://stackoverflow.com/a/52178772
@@ -769,7 +769,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Treat factors as characters, to avoid having them be coerced to
   ## integer later.
   changeCols <- names(Filter(is.factor, built))
-  if(length(changeCols)){
+  if(length(changeCols)) {
   built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
   }
   # https://stackoverflow.com/questions/7813578/convert-column-classes-in-data-table?rq=1#comment31200110_20808945
@@ -777,7 +777,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## If there is only one chunk, then there is no point of making a
   ## common data file.
   ### group chunk var?
-  built <- setDF(built)
+  setDF(built)
   chunk.rows.tab <- table(built[, chunk.vars]) ## ????
   if(length(chunk.rows.tab) == 1) return(NULL)
 
