@@ -748,7 +748,6 @@ getLegend <- function(mb){
 ##' no common data.
 ##' @importFrom stats na.omit
 ##' @import data.table
-##' @importFrom data.table .SD ':='
 getCommonChunk <- function(built, chunk.vars, aes.list){
   if(length(chunk.vars) == 0){
     return(NULL)
@@ -770,7 +769,9 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Treat factors as characters, to avoid having them be coerced to
   ## integer later.
   changeCols <- names(Filter(is.factor, built))
+  if(length(changeCols)){
   built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
+  }
   # https://stackoverflow.com/questions/7813578/convert-column-classes-in-data-table?rq=1#comment31200110_20808945
 
   ## If there is only one chunk, then there is no point of making a
