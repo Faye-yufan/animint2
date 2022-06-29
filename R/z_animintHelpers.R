@@ -747,7 +747,6 @@ getLegend <- function(mb){
 ##' @return a list of common and varied data to save, or NULL if there is
 ##' no common data.
 ##' @importFrom stats na.omit
-##' @import data.table
 getCommonChunk <- function(built, chunk.vars, aes.list){
   if(length(chunk.vars) == 0){
     return(NULL)
@@ -761,32 +760,29 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Remove columns with all NA values
   ## so that common.not.na is not empty
   ## due to the plot's alpha, stroke or other columns
-  built <- as.data.table(built)
-  built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
-  # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
-  # see the benchmark here: https://stackoverflow.com/a/52178772
+  all.nas <- sapply(built, function(x){all(is.na(x))})
+  built <- built[, !all.nas]
 
   ## Treat factors as characters, to avoid having them be coerced to
   ## integer later.
-  changeCols <- names(Filter(is.factor, built))
-  if(length(changeCols)) {
-  built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
+  for(col.name in names(built)){
+    if(is.factor(built[, col.name])){
+      built[, col.name] <- paste(built[, col.name])
+    }
   }
-  # https://stackoverflow.com/questions/7813578/convert-column-classes-in-data-table?rq=1#comment31200110_20808945
 
   ## If there is only one chunk, then there is no point of making a
   ## common data file.
-  ### group chunk var?
-  setDF(built)
-  chunk.rows.tab <- table(built[, chunk.vars]) ## ????
+  chunk.rows.tab <- table(built[, chunk.vars])
   if(length(chunk.rows.tab) == 1) return(NULL)
 
   ## If there is no group column, and all the chunks are the same
   ## size, then add one based on the row number.
   if(! "group" %in% names(built)){
     chunk.rows <- chunk.rows.tab[1]
-    same.size <- chunk.rows == chunk.rows.tab ##?????
-    built <- setorderv(built, chunk.vars)
+    same.size <- chunk.rows == chunk.rows.tab
+    order.args <- lapply(chunk.vars, function(order.col)built[[order.col]])
+    built <- built[do.call(order, order.args),]
     if(all(same.size)){
       built$group <- 1:chunk.rows
     }else{
@@ -892,7 +888,7 @@ getCommonChunk_dt <- function(built, chunk.vars, aes.list){
   ## Remove columns with all NA values
   ## so that common.not.na is not empty
   ## due to the plot's alpha, stroke or other columns
-  built <- setDT(built)
+  built <- as.data.table(built) # a deep copy currently cannot be avoided if deal with a data.frame passed as a function parameter
   built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
   # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
   # see the benchmark here: https://stackoverflow.com/a/52178772
@@ -900,14 +896,16 @@ getCommonChunk_dt <- function(built, chunk.vars, aes.list){
   ## Treat factors as characters, to avoid having them be coerced to
   ## integer later.
   changeCols <- names(Filter(is.factor, built))
+  if(length(changeCols)) {
   built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
+  }
   # https://stackoverflow.com/questions/7813578/convert-column-classes-in-data-table?rq=1#comment31200110_20808945
 
   ## If there is only one chunk, then there is no point of making a
   ## common data file.
   ### group chunk var?
-  built <- as.data.frame(built)
-  chunk.rows.tab <- table(built[, chunk.vars]) ## ????
+  setDF(built)
+  chunk.rows.tab <- table(built[, chunk.vars]) ## divide dataset based on this chunk.vars, imo it's showSelected(could be 1 or more variables)
   if(length(chunk.rows.tab) == 1) return(NULL)
   # built <- setDT(built)
 
