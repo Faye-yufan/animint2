@@ -95,9 +95,9 @@ animint2dir_opt(scatter.viz.opt, "/Users/faye/Desktop/TestScript/Animate2-ggplot
 
 
 profvis({
-  animint2dir_opt(scatter.viz.opt, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/scatter_test_opt", open.browser = FALSE)
+  animint2dir_dt(scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/scatter_test_opt", open.browser = FALSE)
   animint2dir(scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/scatter_test", open.browser = FALSE)
-  animint2dir_opt(grouped.scatter.viz.opt, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/grouped_scatter_test_opt", open.browser = FALSE)
+  animint2dir_dt(grouped.scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/grouped_scatter_test_opt", open.browser = FALSE)
   animint2dir(grouped.scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/grouped_scatter_test", open.browser = FALSE)
 })
 
