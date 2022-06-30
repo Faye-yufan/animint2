@@ -178,7 +178,6 @@ var animint = function (to_select, json_file) {
   var styles = [".axis path{fill: none;stroke: black;shape-rendering: crispEdges;}",
             ".axis line{fill: none;stroke: black;shape-rendering: crispEdges;}",
             ".axis text {font-family: sans-serif;font-size: 11px;}"];
-
   var add_geom = function (g_name, g_info) {
     // Determine what style to use to show the selection for this
     // geom. This is a hack and should be removed when we implement
@@ -603,6 +602,7 @@ var animint = function (to_select, json_file) {
 	}
 	xaxis_g.selectAll("text")
 	  .style("text-anchor", p_info.xanchor)
+    .style("font-size", p_info.xsize)
 	  .attr("transform", "rotate(" + p_info.xangle + " 0 9)");
       }
       if(draw_y){
@@ -622,6 +622,8 @@ var animint = function (to_select, json_file) {
 	  var axis_path = yaxis_g.select("path.domain");
 	  axis_path.remove();
 	}
+  yaxis_g.selectAll(".tick text")
+    .style("font-size", p_info.ysize)
       }
 
       if(!axis.xline) {
