@@ -782,12 +782,11 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## If there is no group column, and all the chunks are the same
   ## size, then add one based on the row number.
   if(! "group" %in% names(built)){
-    built <- as.data.table(built)
     chunk.rows <- chunk.rows.tab[1]$N
     same.size <- chunk.rows == chunk.rows.tab$N ##?????
     built <- data.table::setorderv(built, chunk.vars)
     if(all(same.size)){
-      built$group <- 1:chunk.rows
+      built <- built[, group := rep(1:chunk.rows, length.out = .N)]
     }else{
       ## do not save a common chunk file.
       return(NULL)
