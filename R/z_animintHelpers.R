@@ -778,15 +778,14 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ### group chunk var?
   chunk.rows.tab <- built[, .N, by = chunk.vars] ## divide dataset based on this chunk.vars, imo it's showSelected(could be 1 or more variables)
   if(nrow(chunk.rows.tab) == 1) return(NULL)
-  # built <- setDT(built)
 
   ## If there is no group column, and all the chunks are the same
   ## size, then add one based on the row number.
   if(! "group" %in% names(built)){
+    built <- as.data.table(built)
     chunk.rows <- chunk.rows.tab[1]$N
     same.size <- chunk.rows == chunk.rows.tab$N ##?????
     built <- data.table::setorderv(built, chunk.vars)
-    setDF(built)
     if(all(same.size)){
       built$group <- 1:chunk.rows
     }else{
@@ -795,6 +794,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
     }
   }
 
+  setDF(built)
   built.by.group <- split(built, built$group)
   group.tab <- table(built[, c("group", chunk.vars)])
   each.group.same.size <- apply(group.tab, 1, function(group.size.vec){
