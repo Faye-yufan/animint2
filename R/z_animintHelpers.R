@@ -768,8 +768,8 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Treat factors as characters, to avoid having them be coerced to
   ## integer later.
   changeCols <- names(Filter(is.factor, built))
-  if(length(changeCols)) {
-  built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
+  if(length(changeCols)){
+    built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
   }
   # https://stackoverflow.com/questions/7813578/convert-column-classes-in-data-table?rq=1#comment31200110_20808945
 
@@ -784,7 +784,7 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## size, then add one based on the row number.
   if(! "group" %in% names(built)){
     chunk.rows <- chunk.rows.tab[1]$N
-    same.size <- chunk.rows == chunk.rows.tab ##?????
+    same.size <- chunk.rows == chunk.rows.tab$N ##?????
     built <- data.table::setorderv(built, chunk.vars)
     setDF(built)
     if(all(same.size)){
@@ -916,7 +916,7 @@ getCommonChunk_dt <- function(built, chunk.vars, aes.list){
   ## size, then add one based on the row number.
   if(! "group" %in% names(built)){
     chunk.rows <- chunk.rows.tab[1]$N
-    same.size <- chunk.rows == chunk.rows.tab ##?????
+    same.size <- chunk.rows == chunk.rows.tab$N ##?????
     built <- data.table::setorderv(built, chunk.vars)
     setDF(built)
     if(all(same.size)){
