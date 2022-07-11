@@ -1,3 +1,4 @@
+setwd("/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization")
 library(animint2)
 library(data.table)
 library(profvis)
@@ -92,12 +93,17 @@ scatter.viz.opt <- scatter.viz
 grouped.scatter.viz.opt <- grouped.scatter.viz
 
 
-profvis({
-  animint2dir_dt(scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/scatter_test_opt", open.browser = FALSE)
-  animint2dir(scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/scatter_test", open.browser = FALSE)
-  animint2dir_dt(grouped.scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/grouped_scatter_test_opt", open.browser = FALSE)
-  animint2dir(grouped.scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/grouped_scatter_test", open.browser = FALSE)
+p <- profvis({
+  animint2dir_dt(scatter.viz, "animint_out/scatter_test_opt", open.browser = FALSE)
+  animint2dir_dt(grouped.scatter.viz, "animint_out/grouped_scatter_test_opt", open.browser = FALSE)
+  animint2dir(scatter.viz, "animint_out/scatter_test", open.browser = FALSE)
+  animint2dir(grouped.scatter.viz, "animint_out/grouped_scatter_test", open.browser = FALSE)
 })
+
+# Output profile
+Sys.setenv(RSTUDIO_PANDOC="/Applications/RStudio.app/Contents/MacOS/pandoc")
+htmlwidgets::saveWidget(p, "profile-0711.html")
+
 
 ## Evolution.
 data(generation.loci, package = "animint2")
