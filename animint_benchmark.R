@@ -91,8 +91,6 @@ grouped.scatter.viz$duration <- list("var.main.val" = 1000, "var.second.val" = 1
 scatter.viz.opt <- scatter.viz
 grouped.scatter.viz.opt <- grouped.scatter.viz
 
-animint2dir_opt(scatter.viz.opt, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/scatter_test_opt", open.browser = FALSE)
-
 
 profvis({
   animint2dir_dt(scatter.viz, "/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/scatter_test_opt", open.browser = FALSE)

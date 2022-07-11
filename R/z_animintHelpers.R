@@ -904,9 +904,8 @@ getCommonChunk_dt <- function(built, chunk.vars, aes.list){
   ## If there is only one chunk, then there is no point of making a
   ## common data file.
   ### group chunk var?
-  setDF(built)
-  chunk.rows.tab <- table(built[, chunk.vars]) ## divide dataset based on this chunk.vars, imo it's showSelected(could be 1 or more variables)
-  if(length(chunk.rows.tab) == 1) return(NULL)
+  chunk.rows.tab <- built[, .N, by = chunk.vars] ## divide dataset based on this chunk.vars, imo it's showSelected(could be 1 or more variables)
+  if(nrow(chunk.rows.tab) == 1) return(NULL)
   # built <- setDT(built)
 
   ## If there is no group column, and all the chunks are the same
@@ -915,6 +914,7 @@ getCommonChunk_dt <- function(built, chunk.vars, aes.list){
     chunk.rows <- chunk.rows.tab[1]
     same.size <- chunk.rows == chunk.rows.tab ##?????
     built <- data.table::setorderv(built, chunk.vars)
+    setDF(built)
     if(all(same.size)){
       built$group <- 1:chunk.rows
     }else{
