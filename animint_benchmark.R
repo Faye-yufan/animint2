@@ -146,3 +146,60 @@ evolution <-
        duration=list(generation=1000),
        time=list(variable="generation",ms=2000))
 animint2dir(evolution,"/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/evolution")
+
+
+
+# subscript out of bounds
+viz <- list(
+  ggdata=ggplot(txhousing)+
+    geom_line(aes(x = date, y = median, group = city), 
+              clickSelects="city",
+              alpha = 0.6),
+  selected=ggplot()+
+    geom_line(aes(x = date, y = median, group = city),
+              showSelected="city",
+              data=txhousing),
+  first=list(city="San Marcos")
+)
+info <- animint2HTML(viz)
+
+# sort(names(chunk1)) not identical to sort(c("xmax", "group")).
+# Lengths differ: 9 is not 2
+no.time <-
+  list(scatter=ggplot()+
+       geom_point(aes(life.expectancy, fertility.rate,
+                      colour=region, size=population,
+                      tooltip=paste(country, "population", population),
+                      key=country), # key aesthetic for animated transitions!
+                  showSelected="year",
+                  clickSelects="country",
+                  data=WorldBank)+
+       geom_text(aes(life.expectancy, fertility.rate, label=country,
+                     key=country), # also use key here!
+                 showSelected=c("country", "year"),
+                 data=WorldBank)+
+       scale_size_animint(breaks=10^(5:9))+
+       make_text(WorldBank, 55, 9, "year"),
+       
+       ts=ggplot()+
+       make_tallrect(WorldBank, "year")+
+       geom_line(aes(year, life.expectancy, group=country, colour=region),
+                 clickSelects="country",
+                 data=WorldBank, size=4, alpha=3/5),
+
+       bar=ggplot()+
+       theme_animint(height=2400)+
+       geom_bar(aes(country, life.expectancy, fill=region,
+                    key=country),
+                showSelected="year", clickSelects="country",
+                data=WorldBank, stat="identity", position="identity")+
+       coord_flip(),
+       
+       duration=list(year=1000),
+       
+       first=list(year=1975, country="United States"),
+       
+       title="World Bank data (single selection)")
+
+animint2dir_dt(no.time,"/Users/faye/Desktop/TestScript/Animate2-ggplot/optimization/animint_out/no_time", open.browser = FALSE)
+### no common chunk?
