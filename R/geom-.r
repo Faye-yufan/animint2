@@ -1028,7 +1028,7 @@ Geom <- gganimintproto("Geom",
 
     ## Determine if there are any "common" data that can be saved
     ## separately to reduce disk usage.
-    data.or.null <- getCommonChunk_dt(g.data, chunk.cols, g$aes)
+    data.or.null <- getCommonChunk(g.data, chunk.cols, g$aes)
     g.data.varied <- if(is.null(data.or.null)){
       split.x_dt(na.omit(g.data), chunk.cols)
     }else{
