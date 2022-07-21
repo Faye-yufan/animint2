@@ -209,6 +209,18 @@ storeLayer <- function(meta, g, g.data.varied){
   g
 }
 
+storeLayer_dt <- function(meta, g, g.data.varied){
+  ## Save each variable chunk to a separate tsv file.
+  meta$chunk.i <- 1L
+  meta$g <- g
+  g$chunks <- saveChunks_dt(g.data.varied, meta)
+  g$total <- length(unlist(g$chunks))
+
+  ## Finally save to the master geom list.
+  meta$geoms[[g$classed]] <- g
+  g
+}
+
 #' Compile and render an animint in a local directory.
 #'
 #' This function converts an animint plot.list into a directory of
@@ -654,6 +666,427 @@ servr::httd("', normalizePath( out.dir,winslash="/" ), '")')
   ### An invisible copy of the R list that was exported to JSON.
 }
 
+animint2dir_dt <- function(plot.list, out.dir = NULL,
+                        json.file = "plot.json", open.browser = interactive(),
+                        css.file = "") {
+  if(is.null(out.dir)){
+    out.dir <- tempfile()
+  }
+  unlink(out.dir, recursive=TRUE)
+  ## Check plot.list for errors
+  checkPlotList(plot.list)
+
+  ## Store meta-data in this environment, so we can alter state in the
+  ## lower-level functions.
+  meta <- newEnvironment()
+  meta$selector.types <- plot.list$selector.types
+  dir.create(out.dir,showWarnings=FALSE)
+  meta$out.dir <- out.dir
+
+  ## Store the animation information (time, var, ms) in a separate list
+  AnimationInfo <- list()
+
+  ## Save the animation variable so we can treat it specially when we
+  ## process each geom.
+  # CPS (7-22-14): What if the user doesn't specify milliseconds? Could we provide a reasonable default?
+  if(is.list(plot.list[["time"]])){
+    # Check animation variable for errors
+    checkAnimationTimeVar(plot.list$time)
+    AnimationInfo$time <- plot.list$time
+    ms <- AnimationInfo$time$ms
+    time.var <- AnimationInfo$time$variable
+  }
+
+  ## The title option should just be a character, not a list.
+  if(is.list(plot.list$title)){
+    plot.list$title <- plot.list$title[[1]]
+  }
+  if(is.character(plot.list$title)){
+    meta$title <- plot.list$title[[1]]
+    plot.list$title <- NULL
+  }
+  if(!is.null(plot.list$out.dir)){
+    plot.list$out.dir <- NULL
+  }
+
+  ## Extract essential info from ggplots, reality checks.
+  for(list.name in names(plot.list)){
+    p <- plot.list[[list.name]]
+    if(is.ggplot(p)){
+      ## Save original mapping to every layer so that we can use it afterwards
+      ## This is required because we edit the original plot list created for the
+      ## animint2dir function. See the discussion here:
+      ## https://github.com/tdhock/animint2/pull/5#issuecomment-323072502
+      for(layer_i in seq_along(p$layers)){
+        ## Viz has not been used before
+        if(is.null(p$layers[[layer_i]]$orig_mapping)){
+          p$layers[[layer_i]]$orig_mapping <-
+            if(is.null(p$layers[[layer_i]]$mapping)){
+              ## Get mapping from plot if not defined in layer
+              p$mapping
+            }else{
+              p$layers[[layer_i]]$mapping
+            }
+        }else{
+          ## This is not the first time this layer is being processed, so we replace
+          ## the mapping with the original mapping here
+          p$layers[[layer_i]]$mapping <- p$layers[[layer_i]]$orig_mapping
+        }
+      }
+
+      ## Before calling ggplot_build, we do some error checking for
+      ## some animint extensions.
+      checkPlotForAnimintExtensions(p, list.name)
+    }else if(is.list(p)){ ## for options.
+      meta[[list.name]] <- p
+    }else{
+      stop("list items must be ggplots or option lists, problem: ", list.name)
+    }
+  }
+
+  ## Call ggplot_build in parsPlot for all ggplots
+  ggplot.list <- list()
+  AllPlotsInfo <- list()
+  for(list.name in names(plot.list)){
+    p <- plot.list[[list.name]]
+    if(is.ggplot(p)){
+      ## If plot is correct, save to meta for further processing
+      parsed_info <- parsePlot(meta, p, list.name) # calls ggplot_build.
+      AllPlotsInfo[[list.name]] <- parsed_info$plot.info
+      ggplot.list[[list.name]]$ggplot <- parsed_info$ggplot
+      ggplot.list[[list.name]]$built <- parsed_info$built
+    }
+  }
+
+  ## After going through all of the meta-data in all of the ggplots,
+  ## now we have enough info to save the TSV file database.
+  geom_num <- 0
+  g.list <- list()
+  for(p.name in names(ggplot.list)){
+    ggplot.info <- ggplot.list[[p.name]]
+    for(layer.i in seq_along(ggplot.info$ggplot$layers)){
+      L <- ggplot.info$ggplot$layers[[layer.i]]
+      df <- ggplot.info$built$data[[layer.i]]
+      ## Data now contains columns with fill, alpha, colour etc.
+      ## Remove from data if they have a single unique value and
+      ## are NOT used in mapping to reduce tsv file size
+      redundant.cols <- names(L$geom$default_aes)
+      for(col.name in names(df)){
+        if(col.name %in% redundant.cols){
+          all.vals <- unique(df[[col.name]])
+          if(length(all.vals) == 1){
+            in.mapping <-
+              !is.null(L$mapping[[col.name]])
+            if(!in.mapping){
+              df[[col.name]] <- NULL
+            }
+          }
+        }
+      }
+      geom_num <- geom_num + 1
+      layer_name <- getLayerName(L, geom_num, p.name)
+      if(nrow(df)==0){
+        stop("no data in ", layer_name)
+      }
+      gl <- Geom$export_animint_dt(
+        L, df, meta, layer_name,
+        ggplot.info$ggplot, ggplot.info$built, AnimationInfo)
+      ## Save Animation Info separately
+      AnimationInfo$timeValues <- gl$timeValues
+      gl$timeValues <- NULL
+      ## Save to a list before saving to tsv
+      ## Helps during axis updates and Inf values
+      g.list[[p.name]][[gl$g$classed]] <- gl
+    }#layer.i
+  }
+
+  ## Selector levels and update were stored in saveLayer, so now
+  ## compute the unique values to store in meta$selectors.
+  for(selector.name in names(meta$selector.values)){
+    values.update <- meta$selector.values[[selector.name]]
+    value.vec <- unique(unlist(lapply(values.update, "[[", "values")))
+    meta$selectors[[selector.name]]$selected <- if(
+      meta$selectors[[selector.name]]$type=="single"){
+      value.vec[1]
+    }else{
+      value.vec
+    }
+    ## Check the selectize option to determine if the designer wants
+    ## to show a widget for this selector.
+    selectize <- meta$selectize[[selector.name]]
+    render.widget <- if(is.logical(selectize)){
+      selectize[1]
+    }else{
+      ## If the designer did not set selectize, then we set a default
+      ## (if .variable .value aes, then no selectize; otherwise if
+      ## there are less than 1000 values then yes).
+      if(isTRUE(meta$selectors[[selector.name]]$is.variable.value)){
+        FALSE
+      }else{
+        if(length(value.vec) < 1000){
+          TRUE
+        }else{
+          FALSE
+        }
+      }
+    }
+    if(render.widget){
+      ## Showing selectize widgets is optional, and indicated to the
+      ## renderer by the compiler by not setting the "levels"
+      ## attribute of the selector.
+      meta$selectors[[selector.name]]$levels <- value.vec
+    }
+    ## s.info$update is the list of geom names that will be updated
+    ## for this selector.
+    meta$selectors[[selector.name]]$update <-
+      as.list(unique(unlist(lapply(values.update, "[[", "update"))))
+  }
+
+  ## For a static data viz with no interactive aes, no need to check
+  ## for trivial showSelected variables with only 1 level.
+  checkSingleShowSelectedValue(meta$selectors)
+
+  ## Go through options and add to the list.
+  for(v.name in names(meta$duration)){
+    meta$selectors[[v.name]]$duration <- meta$duration[[v.name]]
+  }
+  ## Set plot sizes.
+  setPlotSizes(meta, AllPlotsInfo)
+
+  ## Get domains of data subsets if theme_animint(update_axes) is used
+  for(p.name in names(ggplot.list)){
+    axes_to_update <- AllPlotsInfo[[p.name]]$options$update_axes
+    if(!is.null(axes_to_update)){
+      for (axis in axes_to_update){
+        subset_domains <- list()
+        # Determine if every panel needs a different domain or not
+        # We conclude here if we want to split the data by PANEL
+        # for the axes updates. Else every panel uses the same domain
+        panels <- ggplot.list[[p.name]]$built$panel$layout$PANEL
+        axes_drawn <-
+          ggplot.list[[p.name]]$built$panel$layout[[
+            paste0("AXIS_", toupper(axis))]]
+        panels_used <- panels[axes_drawn]
+        split_by_panel <- all(panels == panels_used)
+        for(layer.i in seq_along(ggplot.list[[p.name]]$built$plot$layers)){
+          ## If there is a geom where the axes updates have non numeric values,
+          ## we stop and throw an informative warning
+          ## It does not make sense to have axes updates for non numeric values
+          aesthetic_names <- names(g.list[[p.name]][[layer.i]]$g$aes)
+          axis_pattern <- paste0("^", axis)
+          axis_col_name <- grep(axis_pattern, aesthetic_names, value=TRUE)
+          if(0==length(axis_col_name)){
+            ##geom_abline does not have any x/y aes to contribute to
+            ##the scale computations so we just ignore this layer --
+            ##TODO all of this logic for computing the axes updates
+            ##should be moved to the geom classes.
+          }else{
+            first_axis_name <- axis_col_name[[1]]
+            axis_col <- g.list[[p.name]][[layer.i]]$g$aes[[first_axis_name]]
+            axis_is_numeric <- is.numeric(
+              ggplot.list[[p.name]]$built$plot$layers[[
+                layer.i]]$data[[axis_col]])
+            if(!axis_is_numeric){
+              stop(paste0(
+                "'update_axes' specified for '", toupper(axis),
+                "' axis on plot '", p.name,
+                "' but the column '", axis_col, "' is non-numeric.",
+                " Axes updates are only available for numeric data."))
+            }
+            ## handle cases for showSelected: showSelectedlegendfill,
+            ## showSelectedlegendcolour etc.
+            choose_ss <- grepl("^showSelected", aesthetic_names)
+            ss_selectors <- g.list[[p.name]][[layer.i]]$g$aes[choose_ss]
+            ## Do not calculate domains for multiple selectors
+            remove_ss <- c()
+            for(j in seq_along(ss_selectors)){
+              if(meta$selectors[[ ss_selectors[[j]] ]]$type != "single"){
+                remove_ss <- c(remove_ss, ss_selectors[j])
+              }
+            }
+            ss_selectors <- ss_selectors[!ss_selectors %in% remove_ss]
+            ## Only save those selectors which are used by plot
+            for(ss in ss_selectors){
+              if(!ss %in% AllPlotsInfo[[p.name]]$axis_domains[[axis]]$selectors){
+                AllPlotsInfo[[p.name]]$axis_domains[[axis]]$selectors <- c(
+                  ss, AllPlotsInfo[[p.name]]$axis_domains[[axis]]$selectors)
+              }
+            }
+            ## Set up built_data to compute domains
+            built_data <-
+              ggplot.list[[p.name]]$built$plot$layers[[layer.i]]$data
+            built_data$PANEL <-
+              ggplot.list[[p.name]]$built$data[[layer.i]]$PANEL
+            if(length(ss_selectors) > 0){
+              subset_domains[layer.i] <- compute_domains(
+                built_data,
+                axis,
+                strsplit(names(g.list[[p.name]])[[layer.i]], "_")[[1]][[2]],
+                names(sort(ss_selectors)),
+                split_by_panel,
+                g.list[[p.name]][[layer.i]]$g$aes)
+            }
+          }
+        }##for(layer.i
+        subset_domains <- subset_domains[!sapply(subset_domains, is.null)]
+        if(length(subset_domains)==0){
+          warning(paste("update_axes specified for", toupper(axis),
+            "axis on plot", p.name,
+            "but found no geoms with showSelected=singleSelectionVariable,",
+            "so created a plot with no updates for",
+            toupper(axis), "axis"), call. = FALSE)
+          # Do not save in plot.json file if axes is not getting updated
+          update_axes <- AllPlotsInfo[[p.name]]$options$update_axes
+          AllPlotsInfo[[p.name]]$options$update_axes <-
+            update_axes[!axis == update_axes]
+        }else{
+          use_domain <- get_domain(subset_domains)
+          # Save for renderer
+          AllPlotsInfo[[p.name]]$axis_domains[[axis]]$domains <- use_domain
+          # Get gridlines for updates
+          AllPlotsInfo[[p.name]]$axis_domains[[axis]]$grids <-
+            get_ticks_gridlines(use_domain)
+          ## Initially selected selector values are stored in curr_select
+          ## which updates every time a user updates the axes
+          saved_selectors <- sort(names(meta$selectors))
+          for (ss in saved_selectors){
+            if(ss %in% AllPlotsInfo[[p.name]]$axis_domains[[axis]]$selectors){
+              AllPlotsInfo[[p.name]]$axis_domains[[axis]]$curr_select[[ss]] <-
+                meta$selectors[[ss]]$selected
+            }
+          }
+        }
+      }
+    }
+  }
+
+  ## Finally save all the layers
+  for(p.name in names(ggplot.list)){
+    for(g1 in seq_along(g.list[[p.name]])){
+      g <- storeLayer_dt(meta, g.list[[p.name]][[g1]]$g,
+                      g.list[[p.name]][[g1]]$g.data.varied)
+      ## Every plot has a list of geom names.
+      AllPlotsInfo[[p.name]]$geoms <- c(
+        AllPlotsInfo[[p.name]]$geoms, list(g$classed))
+    }
+  }
+
+  ## Now that selectors are all defined, go back through geoms to
+  ## check if there are any warnings to issue.
+  issueSelectorWarnings(meta$geoms, meta$selector.aes, meta$duration)
+
+  ## These geoms need to be updated when the time.var is animated, so
+  ## let's make a list of all possible values to cycle through, from
+  ## all the values used in those geoms.
+  if("time" %in% names(AnimationInfo)){
+    meta$selectors[[AnimationInfo$time$variable]]$type <- "single"
+    anim.values <- AnimationInfo$timeValues
+    if(length(AnimationInfo$timeValues)==0){
+      stop("no interactive aes for time variable ", AnimationInfo$time$variable)
+    }
+    anim.not.null <- anim.values[!sapply(anim.values, is.null)]
+    time.classes <- sapply(anim.not.null, function(x) class(x)[1])
+    time.class <- time.classes[[1]]
+    if(any(time.class != time.classes)){
+      print(time.classes)
+      stop("time variables must all have the same class")
+    }
+    AnimationInfo$time$sequence <- if(time.class=="POSIXct"){
+      orderTime <- function(format){
+        values <- unlist(sapply(anim.not.null, strftime, format))
+        sort(unique(as.character(values)))
+      }
+      hms <- orderTime("%H:%M:%S")
+      f <- if(length(hms) == 1){
+        "%Y-%m-%d"
+      }else{
+        "%Y-%m-%d %H:%M:%S"
+      }
+      orderTime(f)
+    }else if(time.class=="factor"){
+      levs <- levels(anim.not.null[[1]])
+      if(any(sapply(anim.not.null, function(f)levels(f)!=levs))){
+        print(sapply(anim.not.null, levels))
+        stop("all time factors must have same levels")
+      }
+      levs
+    }else{ #character, numeric, integer, ... what else?
+      as.character(sort(unique(unlist(anim.not.null))))
+    }
+    meta$selectors[[time.var]]$selected <- AnimationInfo$time$sequence[[1]]
+  }
+
+  ## The first selection:
+  for(selector.name in names(meta$first)){
+    first <- as.character(meta$first[[selector.name]])
+    if(selector.name %in% names(meta$selectors)){
+      s.type <- meta$selectors[[selector.name]]$type
+      if(s.type == "single"){
+        stopifnot(length(first) == 1)
+      }
+      meta$selectors[[selector.name]]$selected <- first
+    }else{
+      print(list(selectors=names(meta$selectors),
+                 missing.first=selector.name))
+      stop("missing first selector variable")
+    }
+  }
+
+  meta$plots <- AllPlotsInfo
+  meta$time <- AnimationInfo$time
+  meta$timeValues <- AnimationInfo$timeValues
+  ## Finally, copy html/js/json files to out.dir.
+  src.dir <- system.file("htmljs",package="animint2")
+  to.copy <- Sys.glob(file.path(src.dir, "*"))
+  if(file.exists(paste0(out.dir, "styles.css")) | css.file != "default.file"){
+    to.copy <- to.copy[!grepl("styles.css", to.copy, fixed=TRUE)]
+  }
+  if(css.file!=""){
+    # if css filename is provided, copy that file to the out directory as "styles.css"
+    to.copy <- to.copy[!grepl("styles.css", to.copy, fixed=TRUE)]
+    if(!file.exists(css.file)){
+      stop(paste("css.file", css.file, "does not exist. Please check that the file name and path are specified correctly."))
+    } else {
+      file.copy(css.file, file.path(out.dir, "styles.css"), overwrite=TRUE)
+    }
+  } else {
+    style.file <- system.file("htmljs", "styles.css", package = "animint2")
+    file.copy(style.file, file.path(out.dir, "styles.css"), overwrite=TRUE)
+  }
+  file.copy(to.copy, out.dir, overwrite=TRUE, recursive=TRUE)
+  export.names <-
+    c("geoms", "time", "duration", "selectors", "plots", "title")
+  export.data <- list()
+  for(export.name in export.names){
+    if(export.name %in% ls(meta)){
+      export.data[[export.name]] <- meta[[export.name]]
+    }
+  }
+  json <- RJSONIO::toJSON(export.data)
+  cat(json, file = file.path(out.dir, json.file))
+  if (open.browser) {
+    message('opening a web browser with a file:// URL; ',
+            'if the web page is blank, try running
+if (!requireNamespace("servr")) install.packages("servr")
+servr::httd("', normalizePath( out.dir,winslash="/" ), '")')
+    u <- normalizePath(file.path(out.dir, "index.html"))
+    browseURL(u)
+  }
+
+  ## After everything has been done, we restore the original mappings
+  ## in the plot.list. This is necessary for visualizations where we use
+  ## the same plot.list with minor edits in another viz
+  ## See this comment:
+  ## https://github.com/tdhock/animint2/pull/5#issuecomment-323074518
+  for(plot_i in ggplot.list){
+    for(layer_i in seq_along(plot_i$ggplot$layers)){
+      plot_i$ggplot$layers[[layer_i]]$mapping <-
+        plot_i$ggplot$layers[[layer_i]]$orig_mapping
+    }
+  }
+  invisible(meta)
+  ### An invisible copy of the R list that was exported to JSON.
+}
 
 #' Function to get legend information from ggplot
 #' @param plistextra output from ggplot_build(p)
