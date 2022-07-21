@@ -158,7 +158,7 @@ Geom <- gganimintproto("Geom",
   ## AnimationInfo- animation list
   ## ID- number starting from 1
   ## returns- list representing a layer, with corresponding aesthetics, ranges, and groups.
-  export_animint = function(l, d, meta, layer_name, ggplot, built, AnimationInfo) {
+  export_animint_o = function(l, d, meta, layer_name, ggplot, built, AnimationInfo) {
     xminv <- y <- xmaxv <- chunks.for <- NULL
     ## above to avoid NOTE on CRAN check.
     g <- list(geom=strsplit(layer_name, "_")[[1]][2])
@@ -602,7 +602,7 @@ Geom <- gganimintproto("Geom",
   
   #
   # test
-  export_animint_dt = function(l, d, meta, layer_name, ggplot, built, AnimationInfo) {
+  export_animint = function(l, d, meta, layer_name, ggplot, built, AnimationInfo) {
     xminv <- y <- xmaxv <- chunks.for <- NULL
     ## above to avoid NOTE on CRAN check.
     g <- list(geom=strsplit(layer_name, "_")[[1]][2])
@@ -1030,7 +1030,7 @@ Geom <- gganimintproto("Geom",
     ## separately to reduce disk usage.
     data.or.null <- getCommonChunk_dt(g.data, chunk.cols, g$aes)
     g.data.varied <- if(is.null(data.or.null)){
-      split.x(na.omit(g.data), chunk.cols)
+      split.x_dt(na.omit(g.data), chunk.cols)
     }else{
       g$columns$common <- as.list(names(data.or.null$common))
       tsv.name <- sprintf("%s_chunk_common.tsv", g$classed)

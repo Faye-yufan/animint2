@@ -748,7 +748,7 @@ getLegend <- function(mb){
 ##' no common data.
 ##' @importFrom stats na.omit
 ##' @import data.table
-getCommonChunk <- function(built, chunk.vars, aes.list){
+getCommonChunk_o <- function(built, chunk.vars, aes.list){
   if(length(chunk.vars) == 0){
     return(NULL)
   }
@@ -761,164 +761,29 @@ getCommonChunk <- function(built, chunk.vars, aes.list){
   ## Remove columns with all NA values
   ## so that common.not.na is not empty
   ## due to the plot's alpha, stroke or other columns
-  built <- as.data.table(built) # a deep copy currently cannot be avoided if deal with a data.frame passed as a function parameter
-  built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
-  # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
-  # see the benchmark here: https://stackoverflow.com/a/52178772
+  all.nas <- sapply(built, function(x){all(is.na(x))})
+  built <- built[, !all.nas]
 
   ## Treat factors as characters, to avoid having them be coerced to
   ## integer later.
-  changeCols <- names(Filter(is.factor, built))
-  if(length(changeCols)){
-    built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
+  for(col.name in names(built)){
+    if(is.factor(built[, col.name])){
+      built[, col.name] <- paste(built[, col.name])
+    }
   }
-  # https://stackoverflow.com/questions/7813578/convert-column-classes-in-data-table?rq=1#comment31200110_20808945
 
   ## If there is only one chunk, then there is no point of making a
   ## common data file.
-  ### group chunk var?
-  chunk.rows.tab <- built[, .N, by = chunk.vars] ## divide dataset based on this chunk.vars, imo it's showSelected(could be 1 or more variables)
-  if(nrow(chunk.rows.tab) == 1) return(NULL)
+  chunk.rows.tab <- table(built[, chunk.vars])
+  if(length(chunk.rows.tab) == 1) return(NULL)
 
   ## If there is no group column, and all the chunks are the same
   ## size, then add one based on the row number.
   if(! "group" %in% names(built)){
-    chunk.rows <- chunk.rows.tab[1]$N
-    same.size <- chunk.rows == chunk.rows.tab$N ##?????
-    built <- data.table::setorderv(built, chunk.vars)
-    if(all(same.size)){
-      built <- built[, group := rep(1:chunk.rows, length.out = .N)]
-    }else{
-      ## do not save a common chunk file.
-      return(NULL)
-    }
-  }
-
-  setDF(built)
-  built.by.group <- split(built, built$group)
-  group.tab <- table(built[, c("group", chunk.vars)])
-  each.group.same.size <- apply(group.tab, 1, function(group.size.vec){
-    group.size <- group.size.vec[1]
-    if(all(group.size == group.size.vec)){
-      ## groups are all this size.
-      group.size
-    }else{
-      ## groups not the same size.
-      0
-    }
-  })
-
-  checkCommon <- function(col.name){
-    for(group.name in names(built.by.group)){
-      data.vec <- built.by.group[[group.name]][[col.name]]
-      if(group.size <- each.group.same.size[[group.name]]){
-        not.same.value <- data.vec != data.vec[1:group.size]
-        if(any(not.same.value, na.rm=TRUE)){
-          ## if any data values are different, then this is not a
-          ## common column.
-          return(FALSE)
-        }
-      }else{
-        ## this group has different sizes in different chunks, so the
-        ## only way that we can make common data is if there is only
-        ## value.
-        value.tab <- table(data.vec)
-        if(length(value.tab) != 1){
-          return(FALSE)
-        }
-      }
-    }
-    TRUE
-  }
-
-  all.col.names <- names(built)
-  col.name.vec <- all.col.names[!all.col.names %in% chunk.vars]
-  is.common <- sapply(col.name.vec, checkCommon)
-
-  ## TODO: another criterion could be used to save disk space even if
-  ## there is only 1 chunk.
-  n.common <- sum(is.common)
-  if(is.common[["group"]] && 2 <= n.common && n.common < length(is.common)){
-    common.cols <- names(is.common)[is.common]
-    group.info.list <- list()
-    for(group.name in names(built.by.group)){
-      one.group <- built.by.group[[group.name]]
-      group.size <- each.group.same.size[[group.name]]
-      if(group.size == 0){
-        group.size <- 1
-      }
-      group.common <- one.group[, common.cols]
-      ## Instead of just taking the first chunk for this group (which
-      ## may have NA), look for the chunk which has the fewest NA.
-      is.na.vec <- apply(is.na(group.common), 1, any)
-      is.na.mat <- matrix(is.na.vec, group.size)
-      group.i <- which.min(colSums(is.na.mat))
-      offset <- (group.i-1)*group.size
-      group.info.list[[group.name]] <- group.common[(1:group.size)+offset, ]
-    }
-    group.info.common <- do.call(rbind, group.info.list)
-    common.unique <- unique(group.info.common)
-    ## For geom_polygon and geom_path we may have two rows that should
-    ## both be kept (the start and the end of each group may be the
-    ## same if the shape is closed), so we define common.data as all
-    ## of the rows (common.not.na) in that case, and just the unique
-    ## data per group (common.unique) in the other case.
-    data.per.group <- table(common.unique$group)
-    common.data <- if(all(data.per.group == 1)){
-      common.unique
-    }else{
-      group.info.common
-    }
-    varied.df.list <- split.x(na.omit(built), chunk.vars)
-    varied.cols <- c("group", names(is.common)[!is.common])
-    varied.data <- varied.chunk(varied.df.list, varied.cols)
-    return(list(common=na.omit(common.data),
-                varied=varied.data))
-  }
-}
-
-#
-# test
-getCommonChunk_dt <- function(built, chunk.vars, aes.list){
-  if(length(chunk.vars) == 0){
-    return(NULL)
-  }
-  if(! "group" %in% names(aes.list)){
-    ## user did not specify group, so do not use any ggplot2-computed
-    ## group for deciding common data.
-    built$group <- NULL
-  }
-
-  ## Remove columns with all NA values
-  ## so that common.not.na is not empty
-  ## due to the plot's alpha, stroke or other columns
-  built <- as.data.table(built) # a deep copy currently cannot be avoided if deal with a data.frame passed as a function parameter
-  built <- built[,lapply(.SD, function(x) {if(all(is.na(x))) {NULL} else {x}} )]
-  # built <- built[ , which(sapply(built, function(col) all(is.na(col)))) := NULL]
-  # see the benchmark here: https://stackoverflow.com/a/52178772
-
-  ## Treat factors as characters, to avoid having them be coerced to
-  ## integer later.
-  changeCols <- names(Filter(is.factor, built))
-  if(length(changeCols)) {
-  built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
-  }
-  # https://stackoverflow.com/questions/7813578/convert-column-classes-in-data-table?rq=1#comment31200110_20808945
-
-  ## If there is only one chunk, then there is no point of making a
-  ## common data file.
-  ### group chunk var?
-  chunk.rows.tab <- built[, .N, by = chunk.vars] ## divide dataset based on this chunk.vars, imo it's showSelected(could be 1 or more variables)
-  if(nrow(chunk.rows.tab) == 1) return(NULL)
-  # built <- setDT(built)
-
-  ## If there is no group column, and all the chunks are the same
-  ## size, then add one based on the row number.
-  if(! "group" %in% names(built)){
-    chunk.rows <- chunk.rows.tab[1]$N
-    same.size <- chunk.rows == chunk.rows.tab$N ##?????
-    built <- data.table::setorderv(built, chunk.vars)
-    setDF(built)
+    chunk.rows <- chunk.rows.tab[1]
+    same.size <- chunk.rows == chunk.rows.tab
+    order.args <- lapply(chunk.vars, function(order.col)built[[order.col]])
+    built <- built[do.call(order, order.args),]
     if(all(same.size)){
       built$group <- 1:chunk.rows
     }else{
@@ -1009,6 +874,148 @@ getCommonChunk_dt <- function(built, chunk.vars, aes.list){
   }
 }
 
+#
+# test
+##' @param built data.frame of built data.
+##' @param chunk.vars which variables to chunk on.
+##' @param aes.list a character vector of aesthetics.
+##' @param vars character vector of chunk variable names to split on.
+##' @return a list of common and varied data to save, or NULL if there is
+##' no common data.
+##' @importFrom stats na.omit
+##' @import data.table
+getCommonChunk <- function(built, chunk.vars, aes.list){
+  if(length(chunk.vars) == 0){
+    return(NULL)
+  }
+  if(! "group" %in% names(aes.list)){
+    ## user did not specify group, so do not use any ggplot2-computed
+    ## group for deciding common data.
+    built$group <- NULL
+  }
+
+  ## Remove columns with all NA values
+  ## so that common.not.na is not empty
+  ## due to the plot's alpha, stroke or other columns
+  built <- as.data.table(built)
+  ## convert 'built' from df to dt to improve speed
+  built <- built[, lapply(.SD, function(x) {
+    if (all(is.na(x))) {
+      NULL
+    } else {
+      x
+    }
+  })]
+
+  ## Treat factors as characters, to avoid having them be coerced to
+  ## integer later.
+  changeCols <- names(Filter(is.factor, built))
+  if(length(changeCols)){
+    built <- built[, (changeCols) := lapply(.SD, as.character), .SDcols = changeCols]
+  }
+
+  ## If there is only one chunk, then there is no point of making a
+  ## common data file.
+  chunk.rows.tab <- built[, .N, by = chunk.vars]
+  if(nrow(chunk.rows.tab) == 1) return(NULL)
+
+  ## If there is no group column, and all the chunks are the same
+  ## size, then add one based on the row number.
+  if(! "group" %in% names(built)){
+    chunk.rows <- chunk.rows.tab[1]$N
+    same.size <- chunk.rows == chunk.rows.tab$N
+    built <- data.table::setorderv(built, chunk.vars)
+    if(all(same.size)){
+      built <- built[, group := rep(1:chunk.rows, length.out = .N)]
+    }else{
+      ## do not save a common chunk file.
+      return(NULL)
+    }
+  }
+
+  setDF(built)
+  built.by.group <- split(built, built$group)
+  group.tab <- table(built[, c("group", chunk.vars)])
+  each.group.same.size <- apply(group.tab, 1, function(group.size.vec){
+    group.size <- group.size.vec[1]
+    if(all(group.size == group.size.vec)){
+      ## groups are all this size.
+      group.size
+    }else{
+      ## groups not the same size.
+      0
+    }
+  })
+
+  checkCommon <- function(col.name){
+    for(group.name in names(built.by.group)){
+      data.vec <- built.by.group[[group.name]][[col.name]]
+      if(group.size <- each.group.same.size[[group.name]]){
+        not.same.value <- data.vec != data.vec[1:group.size]
+        if(any(not.same.value, na.rm=TRUE)){
+          ## if any data values are different, then this is not a
+          ## common column.
+          return(FALSE)
+        }
+      }else{
+        ## this group has different sizes in different chunks, so the
+        ## only way that we can make common data is if there is only
+        ## value.
+        value.tab <- table(data.vec)
+        if(length(value.tab) != 1){
+          return(FALSE)
+        }
+      }
+    }
+    TRUE
+  }
+
+  all.col.names <- names(built)
+  col.name.vec <- all.col.names[!all.col.names %in% chunk.vars]
+  is.common <- sapply(col.name.vec, checkCommon)
+
+  ## TODO: another criterion could be used to save disk space even if
+  ## there is only 1 chunk.
+  n.common <- sum(is.common)
+  if(is.common[["group"]] && 2 <= n.common && n.common < length(is.common)){
+    common.cols <- names(is.common)[is.common]
+    group.info.list <- list()
+    for(group.name in names(built.by.group)){
+      one.group <- built.by.group[[group.name]]
+      group.size <- each.group.same.size[[group.name]]
+      if(group.size == 0){
+        group.size <- 1
+      }
+      group.common <- one.group[, common.cols]
+      ## Instead of just taking the first chunk for this group (which
+      ## may have NA), look for the chunk which has the fewest NA.
+      is.na.vec <- apply(is.na(group.common), 1, any)
+      is.na.mat <- matrix(is.na.vec, group.size)
+      group.i <- which.min(colSums(is.na.mat))
+      offset <- (group.i-1)*group.size
+      group.info.list[[group.name]] <- group.common[(1:group.size)+offset, ]
+    }
+    group.info.common <- do.call(rbind, group.info.list)
+    common.unique <- unique(group.info.common)
+    ## For geom_polygon and geom_path we may have two rows that should
+    ## both be kept (the start and the end of each group may be the
+    ## same if the shape is closed), so we define common.data as all
+    ## of the rows (common.not.na) in that case, and just the unique
+    ## data per group (common.unique) in the other case.
+    data.per.group <- table(common.unique$group)
+    common.data <- if(all(data.per.group == 1)){
+      common.unique
+    }else{
+      group.info.common
+    }
+    varied.dt.list <- split.x_dt(na.omit(built), chunk.vars)
+    varied.cols <- c("group", names(is.common)[!is.common])
+    varied.data <- varied.chunk_dt(varied.dt.list, varied.cols)
+    return(list(common=na.omit(common.data),
+                varied=varied.data))
+  }
+}
+
 
 ##' Extract subset for each data.frame in a list of data.frame
 ##' @param df.or.list a data.frame or a list of data.frame.
@@ -1026,6 +1033,21 @@ varied.chunk <- function(df.or.list, cols){
     }
   } else{
     lapply(df.or.list, varied.chunk, cols)
+  }
+}
+
+varied.chunk_dt <- function(dt.or.list, cols){
+  if(is.data.frame(dt.or.list)){
+    dt <- dt.or.list[, ..cols, drop = FALSE]
+    u.dt <- unique(dt)
+    group.counts <- u.dt[, .N, by = group]
+    if(all(group.counts$N == 1)){
+      setDF(u.dt)
+    }else{
+      setDF(dt)
+    }
+  } else{
+    lapply(dt.or.list, varied.chunk_dt, cols)
   }
 }
 
@@ -1063,16 +1085,67 @@ split.x <- function(x, vars){
 }
 
 
+split.x_dt <- function(x, vars){
+  if(length(vars)==0)return(x)
+  if(is.data.frame(x)){
+
+    ## Remove columns with all NA values
+    ## so that x is not empty
+    ## due to the plot's alpha, stroke or other columns
+    x <- as.data.table(x)
+    x <- x[, lapply(.SD, function(x) {
+      if (all(is.na(x))) {
+        NULL
+      } else {
+        x
+      }
+    })]
+
+    # rows with NA should not be saved
+    x <- na.omit(x)
+    if(length(vars) == 1){
+      split(x, by = vars, keep.by = FALSE, drop = TRUE)
+    }else{
+      use <- vars[1]
+      rest <- vars[-1]
+      df.list <- split(x, by = use, keep.by = FALSE, drop = TRUE)
+      split.x_dt(df.list, rest)
+    }
+  }else if(is.list(x)){
+    lapply(x, split.x_dt, vars)
+  }else{
+    str(x)
+    stop("unknown object")
+  }
+}
+
+
 ##' Split data set into chunks and save them to separate files.
 ##' @param x data.frame.
 ##' @param meta environment.
 ##' @return recursive list of chunk file names.
 ##' @author Toby Dylan Hocking
-saveChunks <- function(x, meta){
+saveChunks_o <- function(x, meta){
   if(is.data.frame(x)){
     this.i <- meta$chunk.i
     csv.name <- sprintf("%s_chunk%d.tsv", meta$g$classed, this.i)
     write.table(x, file.path(meta$out.dir, csv.name), quote=FALSE,
+                row.names=FALSE, sep="\t")
+    meta$chunk.i <- meta$chunk.i + 1L
+    this.i
+  }else if(is.list(x)){
+    lapply(x, saveChunks_o, meta)
+  }else{
+    str(x)
+    stop("unknown object")
+  }
+}
+
+saveChunks <- function(x, meta){
+  if(is.data.frame(x)){
+    this.i <- meta$chunk.i
+    csv.name <- sprintf("%s_chunk%d.tsv", meta$g$classed, this.i)
+    data.table::fwrite(x, file.path(meta$out.dir, csv.name), quote=FALSE,
                 row.names=FALSE, sep="\t")
     meta$chunk.i <- meta$chunk.i + 1L
     this.i

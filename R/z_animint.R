@@ -209,6 +209,18 @@ storeLayer <- function(meta, g, g.data.varied){
   g
 }
 
+storeLayer_dt <- function(meta, g, g.data.varied){
+  ## Save each variable chunk to a separate tsv file.
+  meta$chunk.i <- 1L
+  meta$g <- g
+  g$chunks <- saveChunks_dt(g.data.varied, meta)
+  g$total <- length(unlist(g$chunks))
+
+  ## Finally save to the master geom list.
+  meta$geoms[[g$classed]] <- g
+  g
+}
+
 #' Compile and render an animint in a local directory.
 #'
 #' This function converts an animint plot.list into a directory of
@@ -951,7 +963,7 @@ animint2dir_dt <- function(plot.list, out.dir = NULL,
   ## Finally save all the layers
   for(p.name in names(ggplot.list)){
     for(g1 in seq_along(g.list[[p.name]])){
-      g <- storeLayer(meta, g.list[[p.name]][[g1]]$g,
+      g <- storeLayer_dt(meta, g.list[[p.name]][[g1]]$g,
                       g.list[[p.name]][[g1]]$g.data.varied)
       ## Every plot has a list of geom names.
       AllPlotsInfo[[p.name]]$geoms <- c(
